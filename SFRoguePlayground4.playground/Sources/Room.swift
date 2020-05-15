@@ -1,6 +1,6 @@
 //
 //  Room.swift
-//  
+//
 //
 //  Created by Paul Ledger on 22/04/2020.
 //
@@ -14,9 +14,7 @@ public class Room: NSObject {
     var number: Int         // Used to identify the room
     var cols: Int           // Number of columns the room is made up of
     var rows: Int           // Number of rows the room is made up of
-    public var doors = [Door]()    // Holds the doors the room has
-    public var isCorridor = false
-    var isHorizontal = false
+    var doors = [Door]()    // Holds the doors the room has
 
     private let randomSource = GKRandomSource.sharedRandom()
 
@@ -50,15 +48,11 @@ public class Room: NSObject {
         self.node.addChild(floor)
     }
 
-    public init(number: Int, rect: CGRect, horizontal: Bool) {
+    public init(number: Int, rect: CGRect) {
         self.number = number
-        self.isCorridor = true
-        self.isHorizontal = horizontal
 
         self.cols = Int(rect.width) / Constants.Constraints.tileSize
         self.rows = Int(rect.height) / Constants.Constraints.tileSize
-        let width = Int(cols * Constants.Constraints.tileSize)
-        let height = Int(rows * Constants.Constraints.tileSize)
 
         self.node = SKShapeNode(rectOf: rect.size)
         self.node.lineWidth = 0
@@ -66,7 +60,8 @@ public class Room: NSObject {
 
         self.node.position = CGPoint(x: rect.midX, y: rect.midY)
         // Create a basic node using the size reduced by 2 tile sizes in each direction
-        let floor =  SKShapeNode(rectOf: CGSize(width: width - (Constants.Constraints.tileSize * 2), height: height - (Constants.Constraints.tileSize * 2)))
+        let floor =  SKShapeNode(rectOf: CGSize(width: Int(rect.width) - (Constants.Constraints.tileSize * 2),
+                                                height: Int(rect.height) - (Constants.Constraints.tileSize * 2)))
         floor.lineWidth = 0
         floor.fillColor = .yellow
         self.node.addChild(floor)
@@ -86,7 +81,7 @@ public class Room: NSObject {
             doorShape.lineWidth = 0
             doorShape.fillColor = .blue
 
-            // Now calculate the X/Y position 
+            // Now calculate the X/Y position
             let x = (Int(door.joiningPoint.x) * Constants.Constraints.tileSize) - (Int(width) / 2) + Constants.Constraints.halfTileSize
             let y = (Int(door.joiningPoint.y) * Constants.Constraints.tileSize) - (Int(height) / 2) + Constants.Constraints.halfTileSize
 
@@ -101,6 +96,10 @@ public class Room: NSObject {
         self.node.frame
     }
 
+    public var noDoors: Bool {
+        return doors.count == 0
+    }
+
     var height: CGFloat {
         self.node.frame.height
     }
@@ -109,19 +108,19 @@ public class Room: NSObject {
         self.node.frame.width
     }
 
-    public var leftEdge: Int {
+    var leftEdge: Int {
         return Int(self.node.frame.minX)
     }
 
-    public var rightEdge: Int {
+    var rightEdge: Int {
         return Int(self.node.frame.maxX)
     }
 
-    public var bottomEdge: Int {
+    var bottomEdge: Int {
         return Int(self.node.frame.minY)
     }
 
-    public var topEdge: Int {
+    var topEdge: Int {
         return Int(self.node.frame.maxY)
     }
 
@@ -237,7 +236,7 @@ public class Room: NSObject {
        return self.frame.intersection(toRoom.frame).width >= Constants.Constraints.doorSpace
    }
 
-   public func createConnectingDoor(toRoom: Room, basedOnWall: Constants.DoorWall) {
+   func createConnectingDoor(toRoom: Room, basedOnWall: Constants.DoorWall) {
        // Used to determine what edges we are comparing
        let sideDoor = (basedOnWall == .left || basedOnWall == .right)
        // Gives an intersection so that we know how much space we have for the door
@@ -286,126 +285,147 @@ public class Room: NSObject {
    }
 
     public func generateCorridor(_ levelArea: CGRect, _ rooms: [Room]) -> Room? {
-        var createdCorridor: Room?
-        var creepAvailable = false
-        let availableLeft = doors.filter( { $0.wall == Constants.DoorWall.left }).count == 0
-        let availableRight = doors.filter( { $0.wall == Constants.DoorWall.right }).count == 0
-        let availableTop = doors.filter( { $0.wall == Constants.DoorWall.top }).count == 0
-        let availableBottom = doors.filter( { $0.wall == Constants.DoorWall.bottom }).count == 0
+        // The unique number of the room if it gets created
+        let roomNumber = rooms.count
 
-        if availableLeft || availableRight {
-            var horizontalExtension =  CGRect( x: Int(levelArea.minX),
-                                               y: Int(frame.minY) ,
-                                               width:  Int(levelArea.width),
-                                               height: Constants.Constraints.corridorSize)
-            repeat {
-                horizontalExtension = horizontalExtension.offsetBy(dx: 0, dy: CGFloat(Constants.Constraints.tileSize))
-                creepAvailable = Int(horizontalExtension.maxY) < topEdge
-                if availableLeft {
-                    createdCorridor = createHorizontalCorridor(horizontalExtension, rooms, .left)
-                }
-
-                if createdCorridor == nil && availableRight {
-                    createdCorridor = createHorizontalCorridor(horizontalExtension, rooms, .right)
-                }
-            } while createdCorridor == nil && creepAvailable
+        // Try and create a horizontal corridor
+        if let corridor = generateHorizontalCorridor(levelArea, rooms, roomNumber) {
+            return corridor
         }
 
-        if createdCorridor == nil && (availableTop || availableBottom) {
-            creepAvailable = false
-            var verticalExtension =  CGRect( x: Int(frame.minX),
-                                             y: Int(levelArea.minY),
-                                             width:  Constants.Constraints.corridorSize,
-                                             height: Int(levelArea.height))
-            repeat {
-                verticalExtension = verticalExtension.offsetBy(dx: CGFloat(Constants.Constraints.tileSize), dy: 0)
-                creepAvailable = Int(verticalExtension.maxX) < rightEdge
-
-                if availableTop {
-                    createdCorridor = createVerticalCorridor(verticalExtension, rooms, .top)
-                }
-
-                if createdCorridor == nil && availableBottom {
-                    createdCorridor = createVerticalCorridor(verticalExtension, rooms, .bottom)
-                }
-
-            } while createdCorridor == nil && creepAvailable
+        // We've not created a horizontal one, so try and create a vertical one
+        if let corridor = generateVerticalCorridor(levelArea, rooms, roomNumber) {
+            return corridor
         }
 
-        return createdCorridor
+        return nil
+    }
+    func generateHorizontalCorridor(_ levelArea: CGRect, _ rooms: [Room], _ roomNumber: Int) -> Room? {
+        // Calculate the imaginary rectangle that extends the width of the level
+        // Place it at the bottom edge of the room
+        var horizontalExtension =  CGRect( x: Int(levelArea.minX),
+                                           y: Int(frame.minY) ,
+                                           width:  Int(levelArea.width),
+                                           height: Constants.Constraints.corridorSize)
+        repeat {
+            // Move the rectangle up a tile (first time this allows for missing the wall
+            horizontalExtension = horizontalExtension.offsetBy(dx: 0, dy: Constants.Constraints.floatTileSize)
+
+            // Find any rooms that intersect this area, that are to the left of this room
+            // and sort them so that the nearest one is the first in the results
+            let intersectingLeftRooms = rooms.filter(
+                    { $0.frame.intersects(horizontalExtension) &&
+                        $0.leftEdge < leftEdge
+                        }
+                    ).sorted { $0.leftEdge > $1.leftEdge }
+
+            // If we have a room, see if we can create the corridor, if it is return it
+            if let possibleRoom = intersectingLeftRooms.first,
+                let corridor = createHorizontalCorridor(horizontalExtension, possibleRoom, .left, roomNumber) {
+                return corridor
+            }
+
+            // Find any rooms that intersect this area, that are to the right of this room
+            // and sort them so that the nearest one is the first in the results
+            let intersectingRightRooms = rooms.filter(
+                    { $0.frame.intersects(horizontalExtension) &&
+                        $0.rightEdge > rightEdge
+                    }
+                ).sorted { $0.rightEdge < $1.rightEdge }
+            // If we have a room, see if we can create the corridor, if it is return it
+            if let possibleRoom = intersectingRightRooms.first,
+                let corridor = createHorizontalCorridor(horizontalExtension, possibleRoom, .right, roomNumber)  {
+                return corridor
+            }
+
+            // We've not created a corridor, if we have space to move the imaginary
+            // rectangle up then loop back round and try again
+
+        } while Int(horizontalExtension.maxY) < topEdge
+
+        return nil
     }
 
-    func createHorizontalCorridor(_ horizontalExtension: CGRect, _ rooms: [Room], _ direction: Constants.DoorWall) -> Room? {
-        let intersectingRooms = direction == .left ?
-            rooms.filter(
-                { $0.frame.intersects(horizontalExtension) &&
-                    $0.leftEdge < leftEdge
-                    }
-                ).sorted { $0.leftEdge > $1.leftEdge }
-        : rooms.filter(
-            { $0.frame.intersects(horizontalExtension) &&
-                $0.rightEdge > rightEdge
-            }
-        ).sorted { $0.rightEdge < $1.rightEdge }
+    func createHorizontalCorridor(_ horizontalExtension: CGRect, _ possibleRoom: Room, _ direction: Constants.DoorWall, _ roomNumber: Int) -> Room? {
+        // Calculate the intersection with the room and check that the area can actually fit a corridor
+        let intersection = possibleRoom.frame.intersection(horizontalExtension)
+        if Int(intersection.height) == Constants.Constraints.corridorSize, Int(intersection.width) >= Constants.Constraints.tileSize {
+            // Calculate the dimensions based on the direction the corridor is going
+            let corridorRect = direction == .left
+                ? CGRect(x: possibleRoom.rightEdge,
+                         y: Int(horizontalExtension.minY),
+                         width: abs(leftEdge - possibleRoom.rightEdge),
+                         height: Constants.Constraints.corridorSize)
+                : CGRect(x: rightEdge,
+                         y: Int(horizontalExtension.minY),
+                         width: abs(possibleRoom.leftEdge - rightEdge),
+                         height: Constants.Constraints.corridorSize)
 
-        if let possibleRoom = intersectingRooms.first  {
-            let intersection = possibleRoom.frame.intersection(horizontalExtension)
-            if Int(intersection.height) == Constants.Constraints.corridorSize, Int(intersection.width) >= Constants.Constraints.tileSize {
-                let corridorRect = direction == .left
-                    ? CGRect(x: possibleRoom.rightEdge,
-                             y: Int(horizontalExtension.minY),
-                             width: abs(leftEdge - possibleRoom.rightEdge),
-                             height: Constants.Constraints.corridorSize)
-                    : CGRect(x: rightEdge,
-                             y: Int(horizontalExtension.minY),
-                             width: abs(possibleRoom.leftEdge - rightEdge),
-                             height: Constants.Constraints.corridorSize)
+            // Create the room
+            let corridorRoom = Room(number: roomNumber, rect: corridorRect)
 
-                let corridorRoom = Room(number: rooms.count, rect: corridorRect, horizontal: true)
-
-                corridorRoom.createConnectingDoor(toRoom: self, basedOnWall:  direction == .left ? .right : .left)
-                corridorRoom.createConnectingDoor(toRoom: possibleRoom, basedOnWall: direction == .left ? .left : .right)
-                return corridorRoom
-            }
+            // Add the doors
+            corridorRoom.createConnectingDoor(toRoom: self, basedOnWall:  direction == .left ? .right : .left)
+            corridorRoom.createConnectingDoor(toRoom: possibleRoom, basedOnWall: direction == .left ? .left : .right)
+            return corridorRoom
         }
 
         return nil
     }
 
-    fileprivate func createVerticalCorridor(_ verticalExtension: CGRect, _ rooms: [Room], _ direction: Constants.DoorWall) -> Room? {
+    func generateVerticalCorridor(_ levelArea: CGRect, _ rooms: [Room], _ roomNumber: Int) -> Room? {
+        var verticalExtension =  CGRect( x: Int(frame.minX),
+                                         y: Int(levelArea.minY),
+                                         width:  Constants.Constraints.corridorSize,
+                                         height: Int(levelArea.height))
+        repeat {
+            verticalExtension = verticalExtension.offsetBy(dx: Constants.Constraints.floatTileSize, dy: 0)
 
-        let intersectingRooms = direction == .top ?
-            rooms.filter(
-                { $0.frame.intersects(verticalExtension) &&
-                        $0.topEdge > topEdge
-                    }
-                ).sorted { $0.topEdge < $1.topEdge }
-        : rooms.filter(
-        { $0.frame.intersects(verticalExtension) &&
-                $0.topEdge < topEdge
+            let intersectingTopRooms = rooms.filter(
+                    { $0.frame.intersects(verticalExtension) &&
+                            $0.topEdge > topEdge
+                        }
+                    ).sorted { $0.topEdge < $1.topEdge }
+            if let possibleRoom = intersectingTopRooms.first,
+                let corridor = createVerticalCorridor(verticalExtension, possibleRoom, .top, roomNumber) {
+                return corridor
             }
-        ).sorted { $0.topEdge > $1.topEdge }
 
-        if let possibleRoom = intersectingRooms.first {
-            let intersection = possibleRoom.frame.intersection(verticalExtension)
-            if Int(intersection.width) == Constants.Constraints.corridorSize, Int(intersection.height) >= Constants.Constraints.tileSize {
-                let corridorRect = direction == .top
-                    ? CGRect(x: Int(verticalExtension.minX),
-                             y: topEdge,
-                             width: Constants.Constraints.corridorSize ,
-                             height: abs(possibleRoom.bottomEdge - topEdge))
-                    : CGRect(x: Int(verticalExtension.minX),
-                             y: possibleRoom.topEdge,
-                             width: Constants.Constraints.corridorSize,
-                             height: abs(bottomEdge - possibleRoom.topEdge))
-
-                let corridorRoom = Room(number: rooms.count, rect: corridorRect, horizontal: false)
-
-                corridorRoom.createConnectingDoor(toRoom: self, basedOnWall:  direction == .top ? .bottom : .top)
-                corridorRoom.createConnectingDoor(toRoom: possibleRoom, basedOnWall: direction == .top ? .top : .bottom)
-                return corridorRoom
-
+            let intersectingBottomRooms = rooms.filter(
+                    { $0.frame.intersects(verticalExtension) &&
+                            $0.topEdge < topEdge
+                        }
+                    ).sorted { $0.topEdge > $1.topEdge }
+            if let possibleRoom = intersectingBottomRooms.first,
+                let corridor = createVerticalCorridor(verticalExtension, possibleRoom, .bottom, roomNumber) {
+                return corridor
             }
+
+        } while Int(verticalExtension.maxX) < rightEdge
+
+        return nil
+    }
+
+
+    func createVerticalCorridor(_ verticalExtension: CGRect, _ possibleRoom: Room, _ direction: Constants.DoorWall, _ roomNumber: Int) -> Room? {
+        let intersection = possibleRoom.frame.intersection(verticalExtension)
+        if Int(intersection.width) == Constants.Constraints.corridorSize, Int(intersection.height) >= Constants.Constraints.tileSize {
+            let corridorRect = direction == .top
+                ? CGRect(x: Int(verticalExtension.minX),
+                         y: topEdge,
+                         width: Constants.Constraints.corridorSize ,
+                         height: abs(possibleRoom.bottomEdge - topEdge))
+                : CGRect(x: Int(verticalExtension.minX),
+                         y: possibleRoom.topEdge,
+                         width: Constants.Constraints.corridorSize,
+                         height: abs(bottomEdge - possibleRoom.topEdge))
+
+            let corridorRoom = Room(number: roomNumber, rect: corridorRect)
+
+            corridorRoom.createConnectingDoor(toRoom: self, basedOnWall:  direction == .top ? .bottom : .top)
+            corridorRoom.createConnectingDoor(toRoom: possibleRoom, basedOnWall: direction == .top ? .top : .bottom)
+            return corridorRoom
+
         }
 
         return nil

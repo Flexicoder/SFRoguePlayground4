@@ -5,12 +5,7 @@ class GameScene: SKScene {
 
     // Array that will be used to hold all of the created rooms, for future use
     private var rooms = [Room]()
-
     private var totalRooms = 20
-
-    var levelArea = CGRect.zero
-
-
 
     override func didMove(to view: SKView) {
         // Now we have a view to render too, create how many rooms we need for the map
@@ -25,8 +20,7 @@ class GameScene: SKScene {
         } while arrangedCount > 0
 
         findConnections()
-        calculateLevelArea()
-       // findCorridors()
+        findCorridors()
 
         for room in rooms {
             room.render(scene: self)
@@ -63,40 +57,22 @@ class GameScene: SKScene {
         }
     }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        findCorridors()
-        for room in rooms.filter({ $0.isCorridor }) {
-            room.render(scene: self)
-        }
-    }
-
-
-    func calculateLevelArea() {
-        levelArea = rooms[0].frame
+    func findCorridors() {
+        // Calculate the whole area the rooms are contained in
+        var levelArea = CGRect.zero
         for room in rooms {
             levelArea = room.frame.union(levelArea)
         }
-    }
 
-
-    func findCorridors() {
-        let roomsWithoutDoors = rooms.filter( { $0.doors.count == 0 } )
+        // Find the rooms that don't have an doors,
+        // obviously not all levels will contain rooms with no doors
+        let roomsWithoutDoors = rooms.filter( { $0.noDoors } )
         for room in roomsWithoutDoors {
+            // Attempt to create a corridor and add it to the array of rooms
             if let corridor = room.generateCorridor(levelArea, rooms) {
                 rooms.append(corridor)
             }
         }
-
-//        for worryRoom in rooms.filter( { $0.doors.count == 1 } ) {
-//            for door in worryRoom.doors {
-//                let toRoom = rooms[door.connectingRoomNumber]
-//                if toRoom.doors.count < 2 {
-//                    if let corridor = worryRoom.generateCorridor(levelArea, rooms) {
-//                        rooms.append(corridor)
-//                    }
-//                }
-//            }
-//        }
     }
 
 
